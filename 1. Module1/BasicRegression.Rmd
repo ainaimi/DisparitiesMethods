@@ -1,0 +1,269 @@
+---
+title: "Introduction to Basic Regression with R"
+author: "Ashley I Naimi"
+date: "Oct 2022"
+urlcolor: blue
+bibliography: ref.bib
+link-citations: yes
+output: 
+    bookdown::pdf_book:
+      base_format: tint::tintPdf
+      toc: true
+      number_sections: true
+      includes:
+        in_header: "../misc/preamble.tex"
+      latex_engine: xelatex
+    html_document:
+      theme: readable
+      toc: true
+      toc_float: true
+      number_sections: true
+      css: "../misc/style.css"
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=40),tidy=TRUE)
+
+
+
+remotes::install_github("rstudio/fontawesome")
+
+library(fontawesome)
+
+
+```
+
+\newpage
+\onehalfspacing
+
+# Regression in R
+
+In this section, we will look at several ways to estimate an exposure-outcome association adjusting for several potential confounding variables. R offers a great degree of flexibility in fitting models to data. Again, there are many ways to do the same thing in R. This section will seek to provide a way forward, and demonstrate how to use regression modeling to estimate associations.
+
+Suppose we wanted to use the NHEFS data to estimate the confounder adjusted effect of quitting smoking on weight change (continuous) and death (binary). We can do this using the analytic dataset we created in the previous section. First, we'll load the relevant libraries needed to conduct our analysis.
+
+```{r, message=F, warning=F}
+
+
+packages <- c("tidyverse","here","broom","boot")
+
+for (package in packages) {
+  if (!require(package, character.only=T, quietly=T)) {
+    install.packages(package, repos='http://lib.stat.cmu.edu/R/CRAN',dependencies=T)
+  }
+}
+
+for (package in packages) {
+  library(package, character.only=T)
+}
+
+```
+
+```{r, include = F}
+
+thm <- theme_classic() +
+  theme(
+    legend.position = "top",
+    legend.background = element_rect(fill = "transparent", colour = NA),
+    legend.key = element_rect(fill = "transparent", colour = NA)
+  )
+theme_set(thm)
+
+```
+
+In the packages above, we've already been introduced to elements of the `tidyverse` and the `here` package. The `broom` package offers tools to extract information from generalized linear models, and create datsets with them. In effect, it allows us to extract regression information in a neat and tidy way. Finally, the `boot` package allows us to implement the bootstrap when needed.^[Though there are many ways to implement the bootstrap, and we need not always use the `boot` package to do this.]
+
+First, we'll load the relevant analytic dataset that we created in the previous section:
+
+```{r}
+
+nhefs <- read_csv(here("data","analytic_data.csv"))
+
+dim(nhefs)
+
+nhefs %>% print(n=5)
+
+```
+
+# Conditionally Adjusted Reegression Model
+
+We'll start with a regression model that allows us to estimate the association between quitting smoking and weight change:
+
+```{r, warning = F, message = F}
+#' Here, we start fitting relevant regression models to the data.
+
+#' This model can be used to quantify a conditionally adjusted 
+#' mean difference with correct standard error
+model_MD <- glm(wt82_71 ~ qsmk + sex + age + race + income + map,
+                data = nhefs,
+                family = gaussian("identity"))
+
+#' summary() is a base R function that reports the fit of a
+#'  regression model neatly in the console
+summary(model_MD)
+
+#' tidy() is a broom function that output the fit of a 
+#' regression model as a tidy dataset
+tidy(model_MD)
+
+```
+
+Using the tidy function, we can save the estimates and standard errors that we want to an object in R.
+
+```{r}
+
+mean_difference1 <- tidy(model_MD)[2,]
+
+mean_difference1
+
+```
+
+Next, lets estimate the effect of quitting smoking on death using a conditionally adjusted logistic regression model
+
+```{r, warning = F, message = F}
+#' Here, we start fitting relevant regression models to the data.
+
+#' This model can be used to quantify a conditionally adjusted 
+#' mean difference with correct standard error
+model_OR <- glm(death ~ qsmk + sex + age + race + income + map,
+                data = nhefs,
+                family = binomial("logit"))
+
+#' summary() is a base R function that reports the fit of a
+#'  regression model neatly in the console
+summary(model_OR)
+
+#' tidy() is a broom function that output the fit of a 
+#' regression model as a tidy dataset
+tidy(model_OR)
+```
+
+To get the OR from the regression model, we have to exponentiate the coefficient from the model output. 
+
+```{r}
+
+qsmk_OR <- tidy(model_OR)[2,]
+
+qsmk_OR[1,2] <- exp(qsmk_OR[1,2])
+
+qsmk_OR
+
+```
+
+If we were interested in estimating conditionally adjusted risk differences or risk ratios for the effect of quitting smoking on death, we could use a similar approach with the identity link function, ordinary least squares, or Poisson regression [@Zou2004,@Naimi2020].
+
+The procedures above constitute general procedures in which we can use the `glm` function to estimate assocaitions. However, before proceeding further, it is useful to explore exactly what happens in R when we fit the glm function. We can explore this, in part, by looking at the contents of the fit from the models. 
+
+We can do this easily with the `str()` function. However, we won't look at the output here because it takes up several pages:
+
+```{r, eval=F}
+
+str(model_MD)
+
+str(model_OR)
+
+```
+
+# Marginally Adjusted Regression Model
+
+Another approach to obtaining mean differences, risk differences, and risk ratios from GLMs is to use marginal standardization [@Naimi2016b]. This process can be implemented by fitting a single model, regressing the outcome against the exposure and all confounder variables. But instead of reading the coefficients the model, one can obtain odds ratios, risk ratios, or risk differences by using this model to generate predicted risks for each individual under “exposed” and “unexposed” scenarios in the dataset. To obtain standard errors, the entire procedure must be bootstrapped.
+
+Here is some code to implement this marginal standardization in the NHEFS data for the association between quitting smoking and weight change:
+
+```{r, warning = F, message = F}
+#' Regress the outcome against the confounders with interaction
+model_MD <- glm(wt82_71 ~ qsmk + sex + age + race + income + map,
+                data = nhefs,
+                family = gaussian("identity"))
+##' Generate predictions for everyone in the sample to obtain 
+##' unexposed (mu0 predictions) and exposed (mu1 predictions) risks.
+mu1 <- predict(model_MD,newdata=transform(nhefs,qsmk=1),type="response")
+mu0 <- predict(model_MD,newdata=transform(nhefs,qsmk=0),type="response")
+
+#' Marginally adjusted mean difference
+marg_stand_MD <- mean(mu1)-mean(mu0)
+
+#' Using the bootstrap to obtain confidence intervals for the marginally adjusted 
+#' risk ratio and risk difference.
+bootfunc <- function(data,index){
+  boot_dat <- data[index,]
+  model_MD_ <- glm(wt82_71 ~ qsmk + sex + age + race + income + map,
+                   data = boot_dat,
+                   family = gaussian("identity"))
+  mu1_ <- predict(model_MD_,newdata=transform(boot_dat,qsmk=1),type="response")
+  mu0_ <- predict(model_MD_,newdata=transform(boot_dat,qsmk=0),type="response")
+  
+  #' Marginally adjusted mean difference
+  res <- mean(mu1_) - mean(mu0_)
+  return(res)
+}
+
+#' Run the boot function. Set a seed to obtain reproducibility
+set.seed(123)
+boot_res <- boot(nhefs,bootfunc,R=2000)
+
+boot_MD <- boot.ci(boot_res)
+
+marg_stand_MD
+
+boot_MD
+```
+
+We can do the same thing to estimate the association between quitting smoking and death:
+
+```{r, warning = F, message = F}
+#' Regress the outcome against the confounders with interaction
+model_OR <- glm(death ~ qsmk + sex + age + race + income + map,
+                data = nhefs,
+                family = binomial("logit"))
+##' Generate predictions for everyone in the sample to obtain 
+##' unexposed (mu0 predictions) and exposed (mu1 predictions) risks.
+mu1 <- predict(model_OR,newdata=transform(nhefs,qsmk=1),type="response")
+mu0 <- predict(model_OR,newdata=transform(nhefs,qsmk=0),type="response")
+
+#' Marginally adjusted odds ratio
+marg_stand_OR <- (mean(mu1)/mean(1-mu1))/(mean(mu0)/mean(1-mu0))
+#' Marginally adjusted risk ratio
+marg_stand_RR <- mean(mu1)/mean(mu0)
+#' Marginally adjusted risk difference
+marg_stand_RD <- mean(mu1)-mean(mu0)
+
+#' Using the bootstrap to obtain confidence intervals for the marginally adjusted 
+#' risk ratio and risk difference.
+bootfunc <- function(data,index){
+  boot_dat <- data[index,]
+  model_OR_ <- glm(death ~ qsmk + sex + age + race + income + map,
+                data = boot_dat,
+                family = binomial("logit"))
+  mu1 <- predict(model_OR_,newdata=transform(boot_dat,qsmk=1),type="response")
+  mu0 <- predict(model_OR_,newdata=transform(boot_dat,qsmk=0),type="response")
+  
+  marg_stand_OR_ <- (mean(mu1)/mean(1-mu1))/(mean(mu0)/mean(1-mu0))
+  marg_stand_RR_ <- mean(mu1)/mean(mu0)
+  marg_stand_RD_ <- mean(mu1)-mean(mu0)
+  res <- c(marg_stand_RD_,marg_stand_RR_,marg_stand_OR_)
+  return(res)
+}
+
+#' Run the boot function. Set a seed to obtain reproducibility
+set.seed(123)
+boot_res <- boot(nhefs,bootfunc,R=2000)
+
+boot_RD <- boot.ci(boot_res,index=1)
+boot_RR <- boot.ci(boot_res,index=2)
+boot_OR <- boot.ci(boot_res,index=3)
+
+marg_stand_OR
+marg_stand_RR
+marg_stand_RD
+
+boot_RD
+boot_RR
+boot_OR
+
+```
+
+\newpage
+
+# References

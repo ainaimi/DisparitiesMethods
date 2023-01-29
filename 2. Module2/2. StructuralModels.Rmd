@@ -1,0 +1,562 @@
+---
+title: "Introduction to Structural Models for Health Disparities"
+author: "Ashley I Naimi"
+date: "Jan 2023"
+urlcolor: blue
+bibliography: ref.bib
+link-citations: yes
+output: 
+    bookdown::pdf_book:
+      base_format: tint::tintPdf
+      toc: true
+      number_sections: true
+      includes:
+        in_header: "../misc/preamble.tex"
+      latex_engine: xelatex
+    html_document:
+      theme: readable
+      toc: true
+      toc_float: true
+      number_sections: true
+      css: "../misc/style.css"
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=40),tidy=TRUE)
+
+packages <- c( "data.table","tidyverse","ggplot2","ggExtra","formatR",
+               "gridExtra","skimr","here","Hmisc","RColorBrewer",
+               "broom","boot")
+
+for (package in packages) {
+  if (!require(package, character.only=T, quietly=T)) {
+    install.packages(package, repos='http://lib.stat.cmu.edu/R/CRAN',dependencies=T)
+  }
+}
+
+for (package in packages) {
+  library(package, character.only=T)
+}
+
+remotes::install_github("rstudio/fontawesome")
+
+library(fontawesome)
+
+thm <- theme_classic() +
+  theme(
+    legend.position = "top",
+    legend.background = element_rect(fill = "transparent", colour = NA),
+    legend.key = element_rect(fill = "transparent", colour = NA)
+  )
+theme_set(thm)
+```
+
+\newpage
+\onehalfspacing
+
+# Introduction
+
+Social epidemiologists are often interested in evaluating the multifaceted interrelationships between social, political, and/or economic constructs, and health related constructs. Every so often, researchers in social epidemiology will rely on analytic methods that are more commonly used in the social sciences. Among these methods include structural equations models, which consist of a set of equations defining the **structural, or causal** relationships between variables in a given system of interest, combined into a single model. At times, latent (or unmeasured) variables are included in the model under a set of assumptions governing their relations with other measured variables in the system. Structural equations models are often used due to their perceived ability to decompose a set of relations between variables into their component mechanisms. 
+
+Several examples / implementations of structural equations models targeting health disparities and/or social epidemiology questions are available in the literature. SEMs have been used to evaluate the relationship and mechanisms between socioeconomic status and smoking [@Martinez2018], race/ethnicity and childhood asthma [@Sidora-Arcoleo2012], social and behavioral variables on a range of health outcomes [@Hartwell2019], and the relationship between weekly working hours and the incidence of injury [@Arlinghaus2012], among other things. 
+
+:::{.rmdnote data-latex="{tip}"}
+
+__Structural Models__:
+
+|               While the word "structural" is often used to connote causal when used in the context of modeling data. However, there are generally two phases where the word "structural" has been used for data analysis. I refer to these phases as pre- and post-counterfactual. Linear structural equation models, for example, have been around and in use since the early 20th century, originating in the work of the American Geneticist Sewell Wright. Unfortunately, causal inference at the turn of the 19th century was highly undeveloped. It was only in the early 1980s where many of the theories around the conditions needed to estimate causal effects using observed data were developed. Structural models developed since then are characterized by a much more complete understanding of the conditions needed to interpret model coefficients causally.
+
+:::
+
+# Structural Equation Models
+
+To give you an example of what a structural equation model entails, consider the SEM depoloyed by Arlinghaus to evaluate the relationship between work hours and injury. The model can be represented by the diagram in Figure 1:
+
+```{r residualplot, out.width="15cm", fig.align='center', fig.margin=FALSE, echo=F, fig.cap="Illustration of a structural equation model used to understand the relationship between work hours and injury."}
+knitr::include_graphics(here("figures","Arlinghaus_Fig.pdf"))
+```
+
+This model can be used to evaluate a number of different questions about the relation between the variables depicted in Figure 1. For example, we may ask:
+
+- How much of the association between BMI and Injury is mediated by Short Sleep?
+
+- Is the pathway from Race to Work Hours to Psychological Distress to Injury stronger than the pathway from Race to Work Hours to Short Sleep to Injury?
+
+- What is the relation between Industry and Injury?
+
+- Does BMI affect Short Sleep?
+
+- Is the relation between Psychological Distress and Injury stronger through the Short Sleep pathway?
+
+This is often seen as a strength of structural equation models: several questions can be answered with the same model fit. Unfortunately, this feature of SEMs comes at the cost of making several fairly hefty assumptions about the *nature* of the relationship between all of the variables in the system [@VanderWeele2012d].
+
+# Problems with Structural Equation Models
+
+Linearity, **extensive** linearity: One assumption characterizing SEMs is that the relationship between all of the variables in thy system are assumed to be linear. What this means is that a single unit increase in each parent variable leads to a single unit increase in each descendant variable. This can be a problem if there's a non-proportionate increase in one or more of the descendant variables [@Seber1989]. 
+
+:::{.rmdnote data-latex="{tip}"}
+
+__The Cost of Assumptions__:
+
+|               Assumptions are embedded into all of science, particularly when we use statistical methods to analyze data. Some of these assumptions are commonly understood (or misunderstood). However, the making of assumptions can sometimes be a bit cavalier in empirical research. While the particular impact of a given assumption or a given set of assumptions can be difficult to specify, the general idea that should be understood is: the more assumptions you make, the higher the chance that one of those assumptions isn't true, and the more likely it is that you get the wrong answer from your particular analysis. Some assumptions are worse than others, in that they are difficult to justify AND they can more than likely lead to a full reversal of the association being studied.
+
+:::
+
+<!-- ^[Isaac Asimov once said "Your assumptions are your windows on the world. Scrub them off every once in a while, or the light won't come in."] -->
+
+Arrow Absence: In any kind of structural equation model a relationship between two variables is depicted by a directed edge (arrow). The presence of an arrow between two variables means that there is direct causal relationship. However, the absence of an arrow implies that there is no relationship between two variables. Generally, assuming that there is no relationship (no arrow) between two variables is stronger than assuming that a relationship exists (arrow present). This is because assuming no arrow forces the relationship between two variables to be excactly zero. However, including an arrow between two variables allows the relationship to be any number, including zero [@Greenland1999]. 
+
+Variable Absence: Excluding a variable from a structural equation model can have important implications for the accuracy and bias of the algorithm. In particular, it's important to include enough variables in the system such that there is no unmeasured confounding. However, when interest lies in a large set of variables in a complex system such as the SEM above, it becomes inordinately difficult to consider all of the relevant variables needed to adjust for confounding. For example, in the SEM presented by Arlinghaus above, it is likely that the age and or number of children confounds the relationship between work hours and sleep, but it is not included in the SEM. Exercise and physical fitness are likely confounders of the relationship between hours of sleep and injury, but there are also not included in the SEM [@Greenland1999].
+
+Sensitivity Analysis for Unmeasured Confounding: Of course, excluding such confounders is a common occurrence in epidemiologic studies. However, for more traditional (single outcome, single exposure) regression analyses, there are a host of methods to explore the sensitivity of results to the presence of such unmeasured confounding. Unfortunately, no such methods exist for SEMs, leaving us in the dark about how sensitive our results may be to the absence of potential confounders [@McCandless2017].
+
+Interactions, particularly for mediation contrasts: SEMs are often used for mediation analysis, where it's important account for exposure-mediator interactions when they are present. Several mediation techniques exist based on counterfactuals that can be used to quantify well-defined mediation effects when exposure-mediator interactions are present. However, it is not as easy to account for such exposure-mediator interactions in the context of a linear SEM [@VanderWeele2016].
+
+Effect interpretation, particularly mediation contrasts: The last 20 years of literature on methods for mediation analysis has focused extensively on precisely how these effects can be defined and interpreted. Much of the work in this area demonstrates that it is not very straightforward nor intuitive. However, mediation effects from SEMs have not received the same degree of attention with respect to the definition of the effect and its interpretation. Thus, there is sufficient reason for concern about precisely what these effects quantify [@Robins1992e]. 
+
+Mediator-outcome confounders, mediator-outcome confounders affected by exposure: Estimating mediated effects without bias requires adjusting for potential confounders of the mediator outcome association. However, sometimes, these confounders may also be affected by the exposure of interest. When these confounders are present (see Margin Figure), SEMs will fail to quantify an unbiased estimate the mediated effect of the exposure [@VanderWeele2014].
+
+```{r figure1, out.width="5cm", fig.align='center', fig.margin=TRUE, echo=F, fig.cap="Mediator outcome confounding affected by the exposure."}
+knitr::include_graphics(here("figures","medF5.pdf"))
+```
+
+Finally, it's important to realize that these assumptions are not simply made with respect to one specific exposure-outcome relation of interest, but rather for all variables in the SEM. There is usually a considerable degree of concern when such assumptions are made for a single exposure-outcome relation [@VanderWeele2012d].
+
+# A Practice Example
+
+To provide a more practical perspective on some of the problems that we can encounter with SEMs, consider the following practice example. To start, we'll simulate some data from a data generating mechanism that looks like Figure 2 in the margin above. These data include one exposure ($x$), one outcome ($y$), one mediator of interest ($m$), one baseline confounder ($c1$), and one mediator-outcome confounder affected by the exposure ($c2$).
+
+```{r}
+
+## simulate some data
+# inverse logit function
+expit <- function(x){1/(1+exp(-x))}
+
+# data gen for SEM example
+
+n <- 2000000
+c1 <- rnorm(n)
+x <- rbinom(n,1,expit(-2 + log(1.5)*c1))
+c2 <- rbinom(n,1,expit(-2 + log(2.5)*x))
+m <- rbinom(n,1,expit(-2 + log(1.5)*c1 + log(2.5)*x + log(2.5)*c2))
+y <- 120 + 1.5*c1 + 1.5*x + 2.5*c2 + 1.5*m + rnorm(n)
+a <- tibble(c1,c2,x,m,y)
+
+a %>% print(n=3)
+```
+
+We can start by using the `lavaan` package to fit a SEM to these data. We will use this to estimate the effect of the exposure on the outcome that does not occur through the mediator of interest. By "effect", I mean specifically what would happen if everyone in this dataset were exposed (i.e., `x = 1`), versus if everyone in this dataset were unexposed (`x = 0`), all while keeping the mediator value fixed^[This effect will come up again and again in our short course. It is actually a key parameter of interest in social epidemiology, as it is often used to quantify the extent to which a health disparity is explained by a third variable.]:
+
+```{r, message=F, warning=F}
+library(lavaan)
+
+sem_model <- ' # direct effect
+               y ~ a0*1 + a1*x + a2*m + a3*c2 + a4*c1
+               # mediator
+               m ~ b0*1 + b1*x + b2*c1 + b3*c2
+               # indirect effect (a*b)
+               ab := a1*b1
+             '
+fit <- sem(sem_model, data = a)
+```
+
+We can extract the coefficient for the exposure effect from this model specifically:
+
+```{r}
+summary(fit)$pe[2,]
+```
+
+Here we see that the average difference in the outcomes that would be observed if everyone were exposed versus unexposed if the mediator were held fixed is equivalent to 1.5 units. 
+
+Unfortunately, this answer is wrong. The correct answer is actually 1.85 units. 
+
+The problem with the answer we obtained from the SEM is that it completely ignores the fact that $x$ also has an effect on $c2$, which has it's own effect on $y$. In the real world, if we were to set everyone to be exposed and then unexposed, this path from $x$ to $c2$ to $y$ would be engaged, and we would end up with a difference in means that would reflect the contribution of this path.
+
+We will see this problem come up again through several examples in the remainder of this section.
+
+# The Target Parameter Framework
+
+Mediation analysis methods continue to gain in popularity. These methods are particularly commmon in social epidemiology, as they are regularly used to assess the extent to which an exposure-outcome relation is attributable to a third variable. Commonly used racial/ethnic classifications, measures of socioeconomic position, or characterizations of the neighborhood environment are all associated with several health outcomes throughout the lifecourse [@Gee2012,@Williams2008a]. Variables representing these constructs are often taken to designate "fundamental" [@Link1995] or "upstream"  [@Gehlert2008] causes that shape the distribution of more proximal risk factors leading to health disparities.
+
+There is a reasonably strong interest in social epidemiology to attempt to quantify how more proximal risk factors explain social disparities in health. 
+
+Examples are numerous and include:
+
+- serum potassium concentrations in the relation between race and diabetes [@Chatterjee2011] 
+- gestational age at birth and birth weight in the relation between race and fetal death [@Lorch2012] 
+- cancer stage at diagnosis in the relation between socioeconomic position and mortality [@Ibfelt2013]
+- systolic blood pressure in the relation between race and stroke [@Howard2011] 
+- tobacco consumption in the relation between neighborhood socioeconomic status and lung cancer [@Hystad2013] 
+- racial disparity in infant mortality explained by breastfeeding prior to discharge from the place of birth [@Naimi2016]
+
+Most of these studies rely on a procedure for mediation (the difference method) that are based on structural equation modeling concepts, and that yields valid causal inferences under rather strict conditions [@Jiang2015,@Naimi2015a].
+
+In this section, we'll introduce key methods for mediation analysis, and discuss how they can be put to use to answer questions in social epidemiology. 
+
+In particular, we focus on the use of methods and interpretation of results that are still valid when mediator-outcome confounders are associated with the exposure.
+
+We outline two key methods. The strength of these methods are many, and include the fact that they can accommodate exposure-mediator interactions and mediator-outcome confounders associated with the exposure. These include inverse probability weighting [@VanderWeele2009a] and an outcome modeling approach known as the "structural transformation method" (also known as sequential g-estimation) [@Vansteelandt2009].
+
+In an associated manuscript, we also provide a similar outline of two "double robust" methods, namely g-estimation of a direct effect structural nested model [@Robins1999] and targeted minimum loss based estimation [@vanderLaan2012].
+
+# Motivating Example
+
+```{r, echo = F}
+set.seed(123)
+## simulate some data
+# inverse logit function
+expit <- function(x){1/(1+exp(-x))}
+
+# data gen for ptb example
+
+library(truncnorm)
+
+n <- 7653
+
+race <- rbinom(n, 1, .43)
+bmi <- 26 + 2.7*race + rnorm(n, 0, 2.5)
+prior_ptb <- rbinom(n, 1, expit(-2.5 + log(3)*race))
+prepreg_smoking <- rbinom(n, 1, expit(-3.5 + log(1.75)*race))
+high_school <- rbinom(n, 1, expit(-.5 + log(2)*race))
+wic <- rbinom(n, 1, expit(-2.5 + log(4)*race))
+maternal_age <- rtruncnorm(n, a = 18, b = Inf, mean = 27, sd = 4.5)
+overall_diet <- rlnorm(n, meanlog = 2 - log(1.5)*race, sdlog = .3)
+
+green_veg <- rbinom(n, 1, expit(1.5 + 
+                                log(3)*race + 
+                                log(2)*scale(overall_diet) +
+                                log(.85)*scale(maternal_age) +
+                                log(.75)*wic +
+                                log(.75)*high_school +
+                                log(2)*prepreg_smoking +
+                                log(.9)*prior_ptb +
+                                log(1.2)*scale(bmi)))
+
+ptb <- rbinom(n, 1, expit(-4 + 
+                          log(3)*race + 
+                          log(2)*green_veg +
+                          log(1.5)*race*green_veg +
+                          log(1.3)*scale(overall_diet) +
+                          log(1.1)*scale(maternal_age) +
+                          log(.75)*wic +
+                          log(.85)*high_school +
+                          log(2)*prepreg_smoking +
+                          log(6)*prior_ptb +
+                          log(1.15)*scale(bmi)))
+
+ID <- 1:n
+
+a <- tibble(ID, ptb, green_veg, overall_diet, maternal_age, bmi, prepreg_smoking, prior_ptb, high_school, wic, race)
+
+write_csv(a, here("data","vegetable_data.csv"))
+```
+
+To get us started as we learn about key methods to analyze health disparities data, let's begin with a hypothetical example dataset on the role of diet in the racial preterm birth disparity. 
+
+These data are available in the online repository: `vegetable_data.csv`
+
+```{r, warning = F, message = F}
+
+a <- read_csv(here("data", "vegetable_data.csv"))
+
+```
+
+These data contain information on 7,653 pregnancies. The outcome of interest is whether the pregnancy ended preterm (i.e., whether the gestational age of the infant was < 37 weeks). The data include information on diet. The primary variable of interest is whether the woman consumed at least 1.5 cups of green leafy vegetables per day per 1000 kcals over the course of her pregnancy. 
+
+A second primary variable of interest is whether the woman self-classifies as non-Hispanic Black versus non-Hispanic White.^[We will explore how to handle more complex multi-category exposures, such as a more complete measure of race/ethnicity, in the in person session.]
+
+We also collected information on several confounders of potential interest. These include:
+
+- pre pregnancy BMI
+- any prior preterm birth
+- pre pregnancy smoking status
+- maternal education
+- participation in WIC
+- maternal age
+- overall diet quality
+
+Here are what the data look like:
+
+```{r}
+# first five columns, first three rows
+a %>% select(1:5) %>% print(n = 3)
+
+# names of all the variables in the dataset
+names(a)
+```
+
+:::{.rmdnote data-latex="{tip}"}
+
+__Self Study__:
+
+|               Construct a project folder based on the material in the previous session. Name the main project folder as `preterm_disparity`, and include the following sub-folders: `data`, `code`, `figures`, `misc`, `sandbox`, `reports`. With this folder structure, create an RStudio project, and conduct a very brief preliminary exploratory data analysis of the `vegetable_data.csv` file, focusing on the outcome (`ptb`), race/ethnicity (`race`), the mediator (`green_veg`), and BMI. Use a table for the outcome, race/ethnicity, and the mediator. Use a histogram for BMI. Save the EDA report in the `reports` folder, and the BMI histogram in the `figures` folder.
+
+Next, share your entire project folder with a classmate in the short course. Is your classmate able to reproduce your report exactly?
+
+:::
+
+Once we have these data loaded, we are ready to start writing code we need for our analysis. But before we can proceed, we need to clearly articulate what we want to quantify, precisely. There are many possible quantities that we can pursue. Here, we will explore methods that can be used to answer questions such as:
+
+*How much of the racial/ethnic disparity in preterm birth is explained by the consumption of green leafy vegetables?*
+
+We can use counterfactual disparity measures, introduced in 2016 [@Naimi2016] to quantify a parameter that correponds to this question.
+
+# Traditional Mediation Analysis
+
+```{r disparitydag, out.width="5cm", fig.align='center', fig.margin=TRUE, echo=F, fig.cap="Mediation diagrams: (a) standard setting with an exposure $X$, mediator $M$, outcome $Y$, measured confounders of the exposure-outcome $C_{XY}$ and mediator-outcome $C_{MY}$. This diagram assumes the exposure $X$ does not affect confounders of the mediator-outcome relation $C_{MY}$; (b) setting in which the exposure affects confounders of the mediator-outcome relation. In this diagram, conditioning on $C_{MY}$ using standard regression methods will ($i$) induce collider bias between $X$ and $U$, and block part of the effect of interest; (c) scenario encountered after applying inverse probability weights for the mediator and exposure; (d) scenario encountered after a structural transformation by subtracting the effect of the mediator from the outcome."}
+knitr::include_graphics(here("figures","Figure1.pdf"))
+```
+
+Figures 1a and 1b are causal diagrams [@Pearl1995], where $X$ represents an exposure, $M$ a mediator, and $Y$ an outcome of interest. We represent exposure-outcome confounders as $C_{XY}$ and mediator-outcome confounders as $C_{MY}$. 
+
+Traditional mediation analysis methods typically answer questions about extent to which the effect of a particular exposure is mediated or transmitted through a second, mediating variable. These questions are usually framed in terms of the "direct" and/or "indirect" effect of an exposure on an outcome. 
+
+Four assumptions may be required to estimate direct and indirect causal exposure effects [@VanderWeele2009b]:
+
+1) No uncontrolled exposure-outcome confounding
+2) No uncontrolled mediator-outcome confounding
+3) No mediator-outcome confounders affected by the exposure
+4) No exposure-mediator interaction on the scale of interest
+
+Assumptions 1 to 3 are encoded in Figure 1a, which shows that adjusting for $C_{XY}$ and $C_{MY}$ leaves no open back-door path from $X$ to $Y$ (Assumptions 1 \& 2), and where there is no arrow from $X$ to $C_{MY}$ (Assumption 3). If the stable unit treatment value assumption [@Rubin1986] is met for both the exposure and the mediator, there is no selection or information bias, and assumptions 1 to 4 hold, estimating the direct and indirect exposure effects can be done with a wide variety of methods, including simple regression, as well as SEMs.
+
+If assumptions 3 and 4 are violated, then simpler methods such as the "difference" method the "generalized product" method, simple regression approaches, or standard structural equation models, cannot be used.
+
+Many exposure variables of common interest in social epidemiology will often be associated with mediator-outcome confounders. 
+
+Let's consider a few examples from the list we introduced above. In each case, it is easy to argue that variables confounding the mediator-outcome relation are also associated with the exposure:
+
+- serum potassium concentrations in the relation between race and diabetes [@Chatterjee2011] 
+
+In this case, the analysts assumed that relevant confounders for the relation between serum potassium concentrations and diabetes include leisure-time physical activity, hypertension, income, and education. However, each of these is arguably associated with race/ethnicity [@Naimi2011].
+
+- systolic blood pressure in the relation between race and stroke [@Howard2011] 
+
+In this case, the analysts adjusted for antihypertensive medication use, diabetes mellitus, atrial fibrillation, heart disease, and cigarette smoking. Again, it is easy to argue that each of these is (sometimes strongly) associated with race and ethnicity.
+
+- tobacco consumption in the relation between neighborhood socioeconomic status and lung cancer [@Hystad2013] 
+
+Here, the analysts adjusted for individual level SES, smoking status, diet, physical activity, alcohol consumption, occupational exposures to cancer causing substances, and exposure to environmental hazards such as ambient air pollution. Once again, each of these confounders may be strongly associated with neighborhood-level SES, which is the primary exposure of interest.
+
+This is a common theme in such analyses in social epidemiology, and there are two takeaways: The first is that improperly accounting these mediator-outcome confounders can lead to biased results. This bias can be very large. For example, we have shown that when improper methods are used, the key associations of interest can be reversed (other side of the null, @Naimi2016). The second takeaway is that we need analytic tools that will allow us to quantify the effects of interest without incurring such biases.
+
+# Counterfactual Disparity Measures: Definition
+
+With the methods we will be using, there is one key assumption required for the valid estiamtion of counterfactual disparity measures:
+
+- No uncontrolled mediator-outcome confounding
+
+Fewer assumptions are required to estimate counterfactual disparity measures ($CDM$) because of the information these quantities provide [@VanderWeele2014a]. 
+
+In our motivating example, our "exposure" $X$ is an indicator of maternal race (1 if non-Hispanic Black, 0 otherwise), $M$ denotes whether a woman consumed at least 1.5 cups of green leafy vegetables per day per 1000 kcals (1 if no, 0 if yes)^[We'll soon see the importance of appropriate variable coding for the mediator and exposure.], and $Y$ denotes whether the pregnancy ended preterm or not (1 if yes, 0 if no). 
+
+We can define a counterfactual disparity measure of this association on the difference scale as: 
+
+$$CDM(m=0) \equiv E \big [ Y(m=0) \mid X = 1 \big ] - E \big [ Y(m=0) \mid X = 0 \big ] \label{cdm_diff}$$
+
+where $Y(m=0)$ is the potential outcome that would be observed if, possibly contrary to fact, a woman consumed at least 1.5 cups of green leafy vegetables per day [@Rubin2005]. We can also define the CDM on the risk ratio scale, such as:
+
+$$CDM(m=0) \equiv \frac{E \big [ Y(m=0) \mid X = 1 \big ]}{E \big [ Y(m=0) \mid X = 0 \big ]} \label{cdm_ratio}$$
+
+In both equations (\ref{cdm_diff}) and (\ref{cdm_ratio}), $CDM(m=0)$ represents the magnitude of the racial disparity in preterm birth that would be observed if all women consumed 1.5 cups per day. 
+
+Next, we'll use the `vegetable_data.csv` dataset to quantify the above CDM using two analytic techniques.
+
+# Inverse Probability Weighted Marginal Structural Models
+
+Inverse probability weighted marginal structural models [@VanderWeele2009a] can be used to estimate counterfactual disparity measures. The approach proceeds by modeling the mediator and (possibly) exposure, generating inverse probability weights from these models, and fitting a weighted regression model of the outcome against the exposure, the mediator, and their interaction. Mathematically, these weights can be obtained as:
+
+$$sw = \frac{f(X)}{f(X \mid C_{XY})}\times \frac{f(M)}{f(M \mid X, C_{XY}, C_{MY} )}$$
+
+where $f(X)$ and $f(M)$ are the probability density functions for $X$ and $M$, respectively. As explained elsewhere [@Hernan2000,@VanderWeele2009a] correct specification of the models for the denominator of $sw$ yields an unbiased estimate of the parameter of interest. To correctly estimate the $CDM$, this approach relies on the assumption that the mediator model is correctly specified as a function of all mediator-outcome confounders.
+
+To do this in R is relatively straightfoward with the standard GLM function:
+
+```{r, warning = F, message = F}
+
+a <- read_csv(here("data", "vegetable_data.csv"))
+
+# code snippet 1
+## mediator models
+
+a$ps_m_num <- glm(green_veg ~ 1, data = a, family = binomial("logit"))$fitted.values
+
+a$ps_m_den <- glm(green_veg ~ overall_diet + maternal_age + bmi + prepreg_smoking + prior_ptb + high_school + wic + race, data = a, family = binomial("logit"))$fitted.values
+
+ggplot(a) + 
+  geom_density(aes(x = ps_m_den, 
+                   group = factor(green_veg), 
+                   color = factor(green_veg)))
+
+a <- a %>% 
+  mutate(sw_m = green_veg*(ps_m_num/ps_m_den) + (1 - green_veg)*((1 - ps_m_num)/(1 - ps_m_den)))
+
+summary(a$sw_m)
+
+a %>% 
+  select(ID, green_veg, ps_m_num, ps_m_den, sw_m) %>% 
+  print(n = 5)
+
+```
+
+Now that we've constructed the stabilized weights that we need, the next step is to fit the model we need to estimate the counterfactual disparity measure. For the IP weighting approach, this is the step where we decide if we want to quantify this measure on the difference or ratio scales (or both):
+
+```{r, warning = F, message = F}
+library(sandwich)
+library(lmtest)
+
+# Overall Risk Difference
+tot_rd <- glm(ptb ~ race,
+              data = a, 
+              family = binomial("identity"))
+
+summary(tot_rd)$coefficients[2,]
+
+tot_rr <- glm(ptb ~ race,
+              data = a, 
+              family = poisson("log"))
+
+tot_vcov_rr <- vcovCL(tot_rr, cluster = a$ID, type="HC3", sandwich=T)
+coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")
+
+# CDM Risk Difference
+cdm_rd <- glm(ptb ~ race + green_veg + race*green_veg, 
+              weights = sw_m, 
+              data = a, 
+              family = binomial("identity"))
+
+cdm_vcov_rd <- vcovCL(cdm_rd, cluster = a$ID, type="HC3", sandwich=T)
+coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")
+
+coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")
+
+cdm_rr <- glm(ptb ~ race + green_veg + race*green_veg, 
+              weights = sw_m, 
+              data = a, 
+              family = poisson("log"))
+
+cdm_vcov_rr <- vcovCL(cdm_rr, cluster = a$ID, type="HC3", sandwich=T)
+coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")
+```
+
+Now that we've used IP weighting to compute the CDM on the risk difference and risk ratio scales, we must now interpret it. 
+
+First, we'll note that the overall disparity in preterm birth between non-Hispanic Black and non-Hispanic White women was `r round(summary(tot_rd)$coefficients[2,1]*100, 0)` per 100 pregnancies (95% CIs: `r round((summary(tot_rd)$coefficients[2,1] - 1.96*summary(tot_rd)$coefficients[2,2])*100, 0)`, `r round((summary(tot_rd)$coefficients[2,1] + 1.96*summary(tot_rd)$coefficients[2,2])*100, 0)`). That is, for every 100 pregnancies, non-Hispanic Black women experienced `r round(summary(tot_rd)$coefficients[2,1]*100, 0)` more preterm births than non-Hispanic White women.
+
+We can now compare this to the counterfactual disparity measure. On the difference scale, the counterfactual disparity measure yielded an estimate of `r round(coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,1]*100, 0)` more preterm births per 100 pregnancies (95% CIs: `r round((coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,1] - 1.96*coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,2])*100, 0)`, `r round((coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,1] + 1.96*coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,2])*100, 0)`). 
+This suggests that, overall, getting all women to consume at least 1.5 cups of green leafy vegetables per 1000 kcals per day would reduce the disparity by approximately `r round((summary(tot_rd)$coefficients[2,1] - coeftest(cdm_rd, vcov = cdm_vcov_rd, type = "HC3")[2,1])*100, 0)` preterm births for every 100 pregnancies.
+
+Note that, while my preference is to present these results on the absolute (i.e., risk difference) scales, it is possible to estimate risk ratios as well. With IP weighting, this simply requires changing the link functions in the distribution specification, as we did in the above code. On the ratio scale, the total racial disparity in preterm birth is `r round(exp(coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")[2,1]), 2)` (95% CIs: `r round(exp(coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")[2,1] - 1.96*coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")[2,2]), 2)`, `r round(exp(coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")[2,1] + 1.96*coeftest(tot_rr, vcov = tot_vcov_rr, type = "HC3")[2,2]), 2)`). After accounting for vegetable consumption, we obtain a counterfactual disparity measure (as a risk ratio) of `r round(exp(coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")[2,1]), 2)` (95% CIs: `r round(exp(coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")[2,1] - 1.96*coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")[2,2]), 2)`, `r round(exp(coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")[2,1] + 1.96*coeftest(cdm_rr, vcov = cdm_vcov_rr, type = "HC3")[2,2]), 2)`).
+
+# The Structural Transformation Method
+
+Inverse probability weighting can be used to calculate counterfactual disparity measures. They are based on modeling the "mediator" to construct weights, and then estimating the CDM by using a weighted regression model for the outcome against the "exposure" and "mediator" (and their interaction). However, there is another approach that we can use to calculate the counterfactual disparity measure that does not require constructing weights. This appraoch has been referred to as the "sequential g estimation" method in the biostatistics literature [@Goetgeluk2008], which is unfortunate, because it is quite distinct from the estimation approach referred to as "g estimation" [see @Naimi2016b]. For this reason, I often refer to this approach as the *structural transformation* method. 
+
+This method starts with a full model that regresses the outcome against the exposure, the mediator, the exposure-mediator interaction, as well as all the confounders needed to adjust for the mediator outcome relation. To estimate the counterfactual disparity measure on the difference scale, we start with generalized linear models with a gaussian distribution and an identity link function, or, equivalently, the `lm` function to implement ordinary least squares:
+
+```{r}
+
+struct_trans1 <- glm(ptb ~ race + green_veg + race*green_veg + overall_diet + maternal_age + bmi + prepreg_smoking + prior_ptb + high_school + wic + race, data = a, family = gaussian("identity"))
+struct_trans1 <- lm(ptb ~ race + green_veg + race*green_veg + overall_diet + maternal_age + bmi + prepreg_smoking + prior_ptb + high_school + wic + race, data = a)
+
+```
+
+From this model, we then extract the coefficients for the mediator, and the mediator-exposure interaction. All we need at this step are the point estimates. We can discard the standard errors and all other statistics:
+
+```{r}
+
+med_estimates <- summary(struct_trans1)$coefficients[c("green_veg","race:green_veg"),"Estimate"]
+
+med_estimates
+
+```
+
+We now create a transformed outcome using these point estimate as follows:
+
+```{r}
+
+a <- a %>% mutate(ptb_tilde = ptb - med_estimates[1]*green_veg - med_estimates[2]*green_veg*race)
+
+```
+
+At this point, let's take a moment to understand what is going on. First, note that the `med_estimates` object contains estimates of the effect of NOT consuming at least 1.5 cups of green leafy vegetables per day per 1000 kcals. Thus, when we create the `ptb_tilde` variable, we are effectively constructing the outcome that would be observed if we remove the contribution that NOT eating green leafy vegetables has to the overall risk. 
+
+Because of the way we coded green leafy vegetable consumption, we can interpret the average of `ptb_tilde` as the preterm birth rate that would be observed if everyone consumed at least 1.5 cups of green leafy vegetables. We can then regress this outcome against race to evaluate the disparity that we'd see if everyone consumed at least 1.5 cups of green leafy vegetables:
+
+```{r}
+
+summary(lm(ptb ~ race, data=a))$coefficients
+
+struct_trans2 <- lm(ptb_tilde ~ race, data=a)
+
+summary(struct_trans2)$coefficients
+
+```
+
+One challenge with using the structural transformation method is that the standard errors contained in the model output are incorrect. To address this, it is best to use the bootstrap [@Efron1993]. Here, we present the simplest bootstrap we can use: the normal-interval bootstrap^[There are several versions of the bootstrap, and most can be implemented using the `boot` package in R. However, here, I'm showing you how to implement a simple normal-interval bootstrap without using the `boot` package.]:
+
+```{r}
+
+cdm_boot <- NULL
+
+for(i in 1:500){
+  # set the seed
+  set.seed(i)
+  
+  # resample the data
+  index <- sample(1:nrow(a), nrow(a), replace = T)
+  boot_dat <- a[index,]
+  
+  # estimate the models
+  struct_trans1_boot <- lm(ptb ~ race + green_veg + race*green_veg + overall_diet + maternal_age + bmi + prepreg_smoking + prior_ptb + high_school + wic + race, data = boot_dat)
+  med_estimates_boot <- summary(struct_trans1)$coefficients[c("green_veg","race:green_veg"),"Estimate"]
+  boot_dat <- boot_dat %>% mutate(ptb_tilde = ptb - med_estimates_boot[1]*green_veg - med_estimates_boot[2]*green_veg*race)
+  struct_trans2_boot <- lm(ptb_tilde ~ race, data=boot_dat)
+  
+  cdm_boot <- rbind(cdm_boot, coef(struct_trans2_boot)[2])
+  
+}
+
+head(cdm_boot)
+
+```
+
+We can obtain a standard error for the counterfactual disparity measure estimate from the `struct_trans2` object above by computing the standard deviation of the bootstrap estimates in the `cdm_boot` object. We can then use this standard error estimate in the standard Wald equation:
+
+```{r}
+
+sd(cdm_boot)
+
+summary(struct_trans2)$coefficients[2,1]*100
+(summary(struct_trans2)$coefficients[2,1] - 1.96*sd(cdm_boot))*100
+(summary(struct_trans2)$coefficients[2,1] + 1.96*sd(cdm_boot))*100
+
+```
+
+We can also compute risk ratios using the structural transformation approach. To do this, we need to modify the above procedure by placing key elements on the log scale. For example:
+
+```{r}
+
+
+
+struct_trans1 <- glm(ptb ~ race + green_veg + race*green_veg + overall_diet + maternal_age + bmi + prepreg_smoking + prior_ptb + high_school + wic + race, data = a, family = poisson("log"))
+
+med_estimates <- summary(struct_trans1)$coefficients[c("green_veg","race:green_veg"),"Estimate"]
+
+a <- a %>% mutate(ptb_tilde = ptb*exp(- med_estimates[1]*green_veg - med_estimates[2]*green_veg*race))
+
+struct_trans2 <- glm(ptb_tilde ~ race, data=a, family = quasipoisson("log"))
+
+round(exp(summary(tot_rr)$coefficients[2,1]),2)
+
+round(exp(summary(struct_trans2)$coefficients[2,1]),2)
+
+```
+
+Confidence intervals for this risk ratio should also be obtained using the bootstrap. 
+
+
+\newpage
+
+# References
